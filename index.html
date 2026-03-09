@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>倒计时提醒</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(135deg,#6a85f5,#7ee8fa);
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.app {
+  background: #fff;
+  width: 420px;
+  max-width: 95%;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.2);
+  padding: 20px;
+}
+h2 {
+  margin: 0 0 15px;
+  text-align: center;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.form input {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+}
+
+/* 重点：时分秒变窄 */
+.time-inputs {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+.time-inputs input {
+  width: 70px;          /* 控制长度 */
+  text-align: center;
+  padding: 8px;
+  font-size: 14px;
+}
+
+button {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: #4f6df5;
+  color: white;
+  font-size: 15px;
+  cursor: pointer;
+}
+button:hover { background: #3b55d6; }
+
+.list { margin-top: 15px; }
+.item {
+  background: #f6f7fb;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.item-text { font-weight: bold; }
+.item-time { font-size: 12px; color: #666; }
+.item-left { font-size: 13px; color: #ff4d4f; }
+.delete-btn {
+  background: #ff4d4f;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.delete-btn:hover { background: #d9363e; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <h2>⏱ 倒计时提醒</h2>
+
+  <div class="form">
+    <input id="text" placeholder="提醒内容，例如：喝水">
+
+    <div class="time-inputs">
+      <input id="hour" type="number" min="0" placeholder="时">
+      <input id="minute" type="number" min="0" placeholder="分">
+      <input id="second" type="number" min="0" placeholder="秒">
+    </div>
+
+    <button onclick="addReminder()">添加提醒</button>
+  </div>
+
+  <div class="list" id="list"></div>
+</div>
+
+<script>
+let reminders = JSON.parse(localStorage.getItem("notify_countdown_reminders") || "[]");
+
+// 请求通知权限
+if ("Notification" in window && Notification.permission === "default") {
+  Notification.requestPermission();
+}
+
+function formatTime(ms) {
+  if (ms < 0) ms = 0;
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  reminders.forEach((r, i) => {
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `
+      <div>
+        <div class="item-text">${r.text}</div>
+        <div class="item-time">目标时间：${new Date(r.targetTime).toLocaleTimeString()}</div>
+        <div class="item-left" id="left-${i}"></div>
+      </div>
+      <button class="delete-btn" onclick="removeReminder(${i})">删除</button>
+    `;
+    list.appendChild(div);
+  });
+  localStorage.setItem("notify_countdown_reminders", JSON.stringify(reminders));
+}
+
+function addReminder() {
+  const text = document.getElementById("text").value;
+  const h = +document.getElementById("hour").value || 0;
+  const m = +document.getElementById("minute").value || 0;
+  const s = +document.getElementById("second").value || 0;
+
+  if (!text) {
+    alert("请输入提醒内容");
+    return;
+  }
+
+  const delayMs = (h * 3600 + m * 60 + s) * 1000;
+  const targetTime = Date.now() + delayMs;
+
+  reminders.push({ text, targetTime, done: false });
+  render();
+
+  document.getElementById("text").value = "";
+  document.getElementById("hour").value = "";
+  document.getElementById("minute").value = "";
+  document.getElementById("second").value = "";
+}
+
+function removeReminder(i) {
+  reminders.splice(i, 1);
+  render();
+}
+
+function pushNotify(msg) {
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("提醒", { body: msg });
+  }
+}
+
+// 每秒刷新倒计时 + 检查触发
+setInterval(() => {
+  const now = Date.now();
+  reminders.forEach((r, i) => {
+    const left = r.targetTime - now;
+    const el = document.getElementById("left-" + i);
+    if (el) el.textContent = "剩余：" + formatTime(left);
+
+    if (!r.done && now >= r.targetTime) {
+      pushNotify(r.text);
+      r.done = true;
+      render();
+    }
+  });
+}, 1000);
+
+render();
+</script>
+
+</body>
+</html>
